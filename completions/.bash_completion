@@ -1,0 +1,7 @@
+_docker-update() {
+    local arg=${COMP_WORDS[COMP_CWORD]}
+    local containers=$(docker container ls -a --format '{{.Names}}')
+    COMPREPLY=($(compgen -W "$containers" $arg))
+}
+
+complete -F _docker-update docker-update

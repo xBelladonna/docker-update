@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+
+docker_update() {
+    # Directory containing Docker scripts and name of script that creates/runs containers
+    # At least directory must be set in order for this function to work
+    local dir="${DOCKER_UPDATE_DIR}"
+    local runscript_name="${DOCKER_UPDATE_RUNSCRIPT:-run.sh}"
+
+    # Sanity check for master directory
+    if [ -z "$dir" ]; then
+        echo -e "Run script/Compose file directory not set, cannot continue.\nPlease set environment variable "DOCKER_UPDATE_DIR" to directory where run scripts and/or docker-compose.yml files can be found."
+        return 1
+    fi
+
+    # Get container name we are updating from first argument
+    local container=$1
+    # Get path of run script or compose file and store in variable
+    # Will search at a maximum depth of 5 directories to prevent infinite recursion and
+    # minimize search time. Freaky bash-escaped regex to search for container names within
+    # run script supports names either without quotes, or enclosed in single or double quotes
+    local runscript
+    local composefile=$(find "$dir" -maxdepth 5 -type f -name docker-compose.yml \
+        -exec grep -E "container_name: (['\"])*$container\$(['\"])*" {} + 2> /dev/null | \
+        awk '{ path=substr($1, 0, length($1)-1); print path }')
+    [ -z "$composefile" ] && [ -n "$runscript_name" ] && \
+        runscript=$(find "$dir" -maxdepth 5 -type f \
+            -name "$runscript_name" \
+            -exec grep -E -- "--name (['\"])*$container(['\"])*(\s|\w)" {} + 2> /dev/null | \
+            awk '{ path=substr($1, 0, length($1)-1); print path }')
+
+    # Sanity check for existence of containers's run script or or parent compose file
+    if [ -z "$composefile" ] && [ -z "$runscript" ]; then
+        echo "Cannot find run script ($runscript_name) or Compose stack for container '$container' in $dir or any of its subdirectories."
+        return 1
+    fi
+
+    # Sanity check for existence of container itself
+    if ! docker ps -a | grep $container > /dev/null; then
+        echo "There is no existing container named '$container'".
+        return 1
+    fi
+
+    # Docker Compose stacks are prioritized over standalone containers
+    if [ -f "$composefile" ]; then
+        # If the container is part of a compose stack
+        cd $(dirname $composefile)
+        local image_ids=($(docker-compose images | awk '{ if (NR>2) print $4 }'))
+        local container_names=($(docker-compose images | awk '{ if (NR>2) print $1 }'))
+        docker-compose pull
+        docker-compose up -d
+        local new_image_ids=($(docker-compose images | awk '{ if (NR>2) print $4 }'))
+        for (( i=0; i<${#image_ids[*]}; i++ )); do
+	        if docker image inspect ${image_ids[$i]} > /dev/null 2>&1 && \
+            [ ${image_ids[$i]} != ${new_image_ids[$i]} ]; then
+                echo Removing old image ID ${image_ids[$i]} for container ${container_names[$i]}...
+                docker rmi ${image_ids[$i]}
+            fi
+        done
+    else
+        # If the container is standalone
+        # Check for jq binary. This is needed to interpret results from docker inspect.
+        if ! which jq > /dev/null; then
+            echo \'jq\' is not installed, attempting to install...
+            local sudo;
+            [ $(id -u) != 0 ] && sudo=sudo
+            if which apt-get > /dev/null; then
+                $sudo apt-get update && $sudo apt-get install -y jq
+            elif which dnf > /dev/null; then
+                $sudo dnf install -y jq
+            elif which yum > /dev/null; then
+                $sudo yum install -y jq
+            else
+                echo "No supported package manager (apt, dnf, yum) found. Please install jq manually."
+            fi
+        fi
+        # Check if jq was successfully installed
+        if ! which jq > /dev/null; then
+            echo "Unable to install jq, cannot continue. Please install manually and run again."
+            return 1
+        fi
+
+        # Declare and assign variables we need to properly identify image and its attributes
+        local digest=$(docker inspect $container | jq -r '.[0].Image')
+        local tag=$(docker image inspect $digest | jq -r '.[0].RepoTags[0]')
+        #local os=$(docker image inspect $digest | jq -r '.[0].Os')
+	local os=linux
+        local arch=$(docker image inspect $digest | jq -r '.[0].Architecture')
+        local args
+
+        # Sometimes images in repositories lie about their architecture and are actually
+        # ARM images with the amd64 arch tag. If an image is tagged as amd64, We avoid
+        # passing any platform argument to docker pull to circumvent the bug that would
+        # occur if the image appeared to be amd64 and is pulled as such wrongly on
+        # ARM-based systemd from the repo, resulting in exec format error
+        [ $arch != "amd64" ] && args+=" --platform $os/$arch"
+
+        # Pull image and get its digest
+        ! docker pull $args $tag && return 1
+        local new_digest=$(docker image inspect $tag | jq -r '.[0].Id')
+
+        # If the image has been updated, update child container using it
+        if [ $digest != $new_digest ]; then
+            echo Recreating $container using new image...
+            docker stop $container && \
+            docker rm $container && \
+            "$runscript"
+            # then remove old image so dangling images don't accumulate and chungle
+            # the host when it runs out of disk space
+            echo Removing old image...
+            docker rmi $digest
+        fi
+    fi
+}
+
+get_container_names() {
+    # Build an array of container names
+    local -a containers
+    for arg in "$@"; do
+        # Identify if the argument is an image tag and add all child containers
+        if docker image inspect $arg > /dev/null 2>&1; then
+            containers+=($(docker container ls -a --format '{{.Names}}' \
+                --filter ancestor=$arg))
+        # otherwise assume a container name and add to array directly
+        else
+           containers+=($arg)
+        fi
+    done
+    # Print container names to stdout
+    echo ${containers[@]}
+}
+
+
+# If script is being sourced, do not execute
+(return 0 2>/dev/null) && exit 0
+
+# Sanity check for provided container(s) and/or image tag(s)
+[ $# = 0 ] && echo -e "No container name(s) or image tag(s) provided.\nPlease supply one or more container names and/or image tags."
+
+# Finally, update containers in array one by one
+for container in $(get_container_names "$@"); do
+    docker_update $container
+done
