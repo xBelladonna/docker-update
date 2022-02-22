@@ -8,7 +8,7 @@ docker_update() {
 
     # Sanity check for master directory
     if [ -z "$dir" ]; then
-        echo -e "Run script/Compose file directory not set, cannot continue.\nPlease set environment variable "DOCKER_UPDATE_DIR" to directory where run scripts and/or docker-compose.yml files can be found."
+        echo -e "Run script/Compose file directory not set, cannot continue.\nPlease set environment variable \"DOCKER_UPDATE_DIR\" to directory where run scripts and/or docker-compose.yml files can be found."
         return 1
     fi
 
@@ -30,13 +30,13 @@ docker_update() {
 
     # Sanity check for existence of containers's run script or or parent compose file
     if [ -z "$composefile" ] && [ -z "$runscript" ]; then
-        echo "Cannot find run script ($runscript_name) or Compose stack for container '$container' in $dir or any of its subdirectories."
+        echo "Cannot find run script ($runscript_name) or Compose stack for container \"$container\" in $dir or any of its subdirectories."
         return 1
     fi
 
     # Sanity check for existence of container itself
     if ! docker ps -a | grep $container > /dev/null; then
-        echo "There is no existing container named '$container'".
+        echo "There is no existing container named \"$container\"".
         return 1
     fi
 
