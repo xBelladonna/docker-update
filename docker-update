@@ -35,7 +35,7 @@ docker_update() {
     fi
 
     # Sanity check for existence of container itself
-    if ! docker ps -a | grep $container > /dev/null; then
+    if ! docker ps -a | grep -w $container > /dev/null; then
         echo "There is no existing container named \"$container\"".
         return 1
     fi
