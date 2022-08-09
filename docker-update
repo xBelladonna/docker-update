@@ -80,7 +80,7 @@ docker_update() {
         fi
 
         # Declare and assign variables we need to properly identify image and its attributes
-        local digest=$(docker inspect $container | jq -r '.[0].Image')
+        local digest=$(get_container_digest $container)
         local tag=$(docker image inspect $digest | jq -r '.[0].RepoTags[0]')
         #local os=$(docker image inspect $digest | jq -r '.[0].Os')
 	local os=linux
@@ -88,7 +88,7 @@ docker_update() {
         local args
 
         # Sometimes images in repositories lie about their architecture and are actually
-        # ARM images with the amd64 arch tag. If an image is tagged as amd64, We avoid
+        # ARM images with the amd64 arch tag. If an image is tagged as amd64, we avoid
         # passing any platform argument to docker pull to circumvent the bug that would
         # occur if the image appeared to be amd64 and is pulled as such wrongly on
         # ARM-based systemd from the repo, resulting in exec format error
@@ -96,7 +96,7 @@ docker_update() {
 
         # Pull image and get its digest
         ! docker pull $args $tag && return 1
-        local new_digest=$(docker image inspect $tag | jq -r '.[0].Id')
+        local new_digest=$(get_image_digest $tag)
 
         # If the image has been updated, update child container using it
         if [ $digest != $new_digest ]; then
@@ -110,6 +110,20 @@ docker_update() {
             docker rmi $digest
         fi
     fi
+}
+
+get_container_digest() {
+    # Gets the digest of a container's image
+    local container=$1
+    local digest=$(docker inspect $container | jq -r '.[0].Image')
+    echo $digest
+}
+
+get_image_digest() {
+    # Gets the digest of an image directly
+    local tag=$1
+    local digest=$(docker image inspect $tag | jq -r '.[0].Id')
+    echo $digest
 }
 
 get_container_names() {
