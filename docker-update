@@ -145,12 +145,12 @@ get_container_names() {
 
 
 # If script is being sourced, do not execute
-(return 0 2>/dev/null) && exit 0
+if ! (return 0 2>/dev/null); then
+    # Sanity check for provided container(s) and/or image tag(s)
+    [ $# = 0 ] && echo -e "No container name(s) or image tag(s) provided.\nPlease supply one or more container names and/or image tags."
 
-# Sanity check for provided container(s) and/or image tag(s)
-[ $# = 0 ] && echo -e "No container name(s) or image tag(s) provided.\nPlease supply one or more container names and/or image tags."
-
-# Finally, update containers in array one by one
-for container in $(get_container_names "$@"); do
-    docker_update $container
-done
+    # Finally, update containers in array one by one
+    for container in $(get_container_names "$@"); do
+        docker_update $container
+    done
+fi
