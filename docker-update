@@ -43,12 +43,19 @@ docker_update() {
     # Docker Compose stacks are prioritized over standalone containers
     if [ -f "$composefile" ]; then
         # If the container is part of a compose stack
+        # Test for docker-compose
+        local compose=$(which docker-compose || docker compose > /dev/null 2>&1 && echo "docker compose" || echo -1)
+        if [ "$compose" = -1 ]; then
+            echo Docker compose not found. Please update docker or install legacy docker-compose.
+            return 1
+        fi
+
         cd $(dirname $composefile)
-        local image_ids=($(docker-compose images | awk '{ if (NR>2) print $4 }'))
-        local container_names=($(docker-compose images | awk '{ if (NR>2) print $1 }'))
-        docker-compose pull
-        docker-compose up -d
-        local new_image_ids=($(docker-compose images | awk '{ if (NR>2) print $4 }'))
+        local image_ids=($($compose images | awk '{ if (NR>2) print $4 }'))
+        local container_names=($($compose images | awk '{ if (NR>2) print $1 }'))
+        $compose pull
+        $compose up -d
+        local new_image_ids=($($compose images | awk '{ if (NR>2) print $4 }'))
         for (( i=0; i<${#image_ids[*]}; i++ )); do
 	        if docker image inspect ${image_ids[$i]} > /dev/null 2>&1 && \
             [ ${image_ids[$i]} != ${new_image_ids[$i]} ]; then
