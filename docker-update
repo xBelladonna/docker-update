@@ -41,11 +41,14 @@ docker_update() {
     fi
 
     # Docker Compose stacks are prioritized over standalone containers
-    if [ -f "$composefile" ]; then
+        if [ -f "$composefile" ]; then
         # If the container is part of a compose stack
-        # Test for docker-compose
-        local compose=$(which docker-compose || docker compose > /dev/null 2>&1 && echo "docker compose" || echo -1)
-        if [ "$compose" = -1 ]; then
+        local compose
+        if which docker-compose > /dev/null; then
+            compose=docker-compose
+        elif docker compose > /dev/null 2>&1; then
+            compose="docker compose"
+        else
             echo Docker compose not found. Please update docker or install legacy docker-compose.
             return 1
         fi
