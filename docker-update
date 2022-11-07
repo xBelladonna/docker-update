@@ -128,14 +128,18 @@ get_container_digest() {
     local digest=$(docker inspect $container | jq -r '.[0].Image')
     echo $digest
 }
-
 get_image_digest() {
     # Gets the digest of an image directly
     local tag=$1
     local digest=$(docker image inspect $tag | jq -r '.[0].Id')
     echo $digest
 }
-
+get_image_tag() {
+    # Gets the tag of an image directly by its digest
+    local digest=$1
+    local tag=$(docker image inspect $digest | jq -r '.[0].RepoTags[0]')
+    echo $tag
+}
 get_container_names() {
     # Build an array of container names
     local -a containers
