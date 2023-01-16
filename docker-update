@@ -20,12 +20,11 @@ docker_update() {
     # run script supports names either without quotes, or enclosed in single or double quotes
     local runscript
     local composefile=$(find "$dir" -maxdepth 5 -type f -name docker-compose.yml \
-        -exec grep -E "container_name: (['\"])*$container\$(['\"])*" {} + 2> /dev/null | \
-        awk '{ path=substr($1, 0, length($1)-1); print path }')
-    [ -z "$composefile" ] && [ -n "$runscript_name" ] && \
+        -exec grep -l -E "container_name: (['\"])*$container\$(['\"])*" {} + 2>/dev/null)
+    [ -z "$composefile" ] && [ -n "$runscript_name" ] &&
         runscript=$(find "$dir" -maxdepth 5 -type f \
             -name "$runscript_name" \
-            -exec grep -E -- "--name (['\"])*$container(['\"])*(\s|\w)" {} + 2> /dev/null | \
+            -exec grep -l -E -- "--name (['\"])*$container(['\"])*(\s|\w)" {} + 2>/dev/null |
             awk '{ path=substr($1, 0, length($1)-1); print path }')
 
     # Sanity check for existence of containers's run script or or parent compose file
@@ -35,21 +34,21 @@ docker_update() {
     fi
 
     # Sanity check for existence of container itself
-    if ! docker ps -a | grep -w $container > /dev/null; then
+    if ! docker ps -a | grep -w $container >/dev/null; then
         echo "There is no existing container named \"$container\"".
         return 1
     fi
 
     # Docker Compose stacks are prioritized over standalone containers
-        if [ -f "$composefile" ]; then
+    if [ -f "$composefile" ]; then
         # If the container is part of a compose stack
         local compose
-        if which docker-compose > /dev/null; then
+        if which docker-compose >/dev/null; then
             compose=docker-compose
-        elif docker compose > /dev/null 2>&1; then
+        elif docker compose >/dev/null 2>&1; then
             compose="docker compose"
         else
-            echo Docker compose not found. Please update docker or install legacy docker-compose.
+            echo "Docker compose not found. Please update docker and install docker-compose-plugin or install legacy docker-compose."
             return 1
         fi
 
@@ -59,9 +58,9 @@ docker_update() {
         $compose pull
         $compose up -d
         local new_image_ids=($($compose images | awk '{ if (NR>2) print $4 }'))
-        for (( i=0; i<${#image_ids[*]}; i++ )); do
-	        if docker image inspect ${image_ids[$i]} > /dev/null 2>&1 && \
-            [ ${image_ids[$i]} != ${new_image_ids[$i]} ]; then
+        for ((i = 0; i < ${#image_ids[*]}; i++)); do
+            if docker image inspect ${image_ids[$i]} >/dev/null 2>&1 &&
+                [ ${image_ids[$i]} != ${new_image_ids[$i]} ]; then
                 echo Removing old image ID ${image_ids[$i]} for container ${container_names[$i]}...
                 docker rmi ${image_ids[$i]}
             fi
@@ -69,22 +68,22 @@ docker_update() {
     else
         # If the container is standalone
         # Check for jq binary. This is needed to interpret results from docker inspect.
-        if ! which jq > /dev/null; then
+        if ! which jq >/dev/null; then
             echo \'jq\' is not installed, attempting to install...
-            local sudo;
+            local sudo
             [ $(id -u) != 0 ] && sudo=sudo
-            if which apt-get > /dev/null; then
+            if which apt-get >/dev/null; then
                 $sudo apt-get update && $sudo apt-get install -y jq
-            elif which dnf > /dev/null; then
+            elif which dnf >/dev/null; then
                 $sudo dnf install -y jq
-            elif which yum > /dev/null; then
+            elif which yum >/dev/null; then
                 $sudo yum install -y jq
             else
                 echo "No supported package manager (apt, dnf, yum) found. Please install jq manually."
             fi
         fi
         # Check if jq was successfully installed
-        if ! which jq > /dev/null; then
+        if ! which jq >/dev/null; then
             echo "Unable to install jq, cannot continue. Please install manually and run again."
             return 1
         fi
@@ -93,7 +92,7 @@ docker_update() {
         local digest=$(get_container_digest $container)
         local tag=$(docker image inspect $digest | jq -r '.[0].RepoTags[0]')
         #local os=$(docker image inspect $digest | jq -r '.[0].Os')
-	local os=linux
+        local os=linux
         local arch=$(docker image inspect $digest | jq -r '.[0].Architecture')
         local args
 
@@ -111,9 +110,9 @@ docker_update() {
         # If the image has been updated, update child container using it
         if [ $digest != $new_digest ]; then
             echo Recreating $container using new image...
-            docker stop $container && \
-            docker rm $container && \
-            "$runscript"
+            docker stop $container &&
+                docker rm $container &&
+                "$runscript"
             # then remove old image so dangling images don't accumulate and chungle
             # the host when it runs out of disk space
             echo Removing old image...
@@ -145,18 +144,17 @@ get_container_names() {
     local -a containers
     for arg in "$@"; do
         # Identify if the argument is an image tag and add all child containers
-        if docker image inspect $arg > /dev/null 2>&1; then
+        if docker image inspect $arg >/dev/null 2>&1; then
             containers+=($(docker container ls -a --format '{{.Names}}' \
                 --filter ancestor=$arg))
         # otherwise assume a container name and add to array directly
         else
-           containers+=($arg)
+            containers+=($arg)
         fi
     done
     # Print container names to stdout
     echo ${containers[@]}
 }
-
 
 # If script is being sourced, do not execute
 if ! (return 0 2>/dev/null); then
