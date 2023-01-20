@@ -24,8 +24,7 @@ docker_update() {
     [ -z "$composefile" ] && [ -n "$runscript_name" ] &&
         runscript=$(find "$dir" -maxdepth 5 -type f \
             -name "$runscript_name" \
-            -exec grep -l -E -- "--name (['\"])*$container(['\"])*(\s|\w)" {} + 2>/dev/null |
-            awk '{ path=substr($1, 0, length($1)-1); print path }')
+            -exec grep -l -E -- "--name (['\"])*$container(['\"])*(\s|\w)" {} + 2>/dev/null)
 
     # Sanity check for existence of containers's run script or or parent compose file
     if [ -z "$composefile" ] && [ -z "$runscript" ]; then
