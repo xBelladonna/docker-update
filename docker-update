@@ -77,8 +77,10 @@ docker_update() {
                 $sudo dnf install -y jq
             elif which yum >/dev/null; then
                 $sudo yum install -y jq
+            elif which pacman >/dev/null; then
+                $sudo pacman -S jq
             else
-                echo "No supported package manager (apt, dnf, yum) found. Please install jq manually."
+                echo "No supported package manager (apt, dnf, yum or pacman) found."
             fi
         fi
         # Check if jq was successfully installed
