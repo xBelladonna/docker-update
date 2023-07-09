@@ -47,7 +47,7 @@ docker_update() {
         elif docker compose >/dev/null 2>&1; then
             compose="docker compose"
         else
-            echo "Docker compose not found. Please update docker and install docker-compose-plugin or install legacy docker-compose."
+            echo "Docker compose not found. Please update Docker and install docker-compose-plugin or install legacy docker-compose."
             return 1
         fi
 
@@ -66,32 +66,10 @@ docker_update() {
         done
     else
         # If the container is standalone
-        # Check for jq binary. This is needed to interpret results from docker inspect.
-        if ! which jq >/dev/null; then
-            echo \'jq\' is not installed, attempting to install...
-            local sudo
-            [ $(id -u) != 0 ] && sudo=sudo
-            if which apt-get >/dev/null; then
-                $sudo apt-get update && $sudo apt-get install -y jq
-            elif which dnf >/dev/null; then
-                $sudo dnf install -y jq
-            elif which yum >/dev/null; then
-                $sudo yum install -y jq
-            elif which pacman >/dev/null; then
-                $sudo pacman -S jq
-            else
-                echo "No supported package manager (apt, dnf, yum or pacman) found."
-            fi
-        fi
-        # Check if jq was successfully installed
-        if ! which jq >/dev/null; then
-            echo "Unable to install jq, cannot continue. Please install manually and run again."
-            return 1
-        fi
-
+        install_jq # so we can interpret results from docker inspect
         # Declare and assign variables we need to properly identify image and its attributes
         local digest=$(get_container_digest $container)
-        local tag=$(docker image inspect $digest | jq -r '.[0].RepoTags[0]')
+        local tag=$(get_image_tag $digest)
         #local os=$(docker image inspect $digest | jq -r '.[0].Os')
         local os=linux
         local arch=$(docker image inspect $digest | jq -r '.[0].Architecture')
@@ -129,13 +107,13 @@ get_container_digest() {
     echo $digest
 }
 get_image_digest() {
-    # Gets the digest of an image directly
+    # Gets the digest of an image tag directly
     local tag=$1
     local digest=$(docker image inspect $tag | jq -r '.[0].Id')
     echo $digest
 }
 get_image_tag() {
-    # Gets the tag of an image directly by its digest
+    # Gets the tag of an image digest
     local digest=$1
     local tag=$(docker image inspect $digest | jq -r '.[0].RepoTags[0]')
     echo $tag
@@ -155,6 +133,33 @@ get_container_names() {
     done
     # Print container names to stdout
     echo ${containers[@]}
+}
+install_jq() {
+    # Check for jq binary
+        if ! which jq >/dev/null; then
+            echo \'jq\' is not installed, attempting to install...
+            # Use sudo if we are not root
+            local sudo
+            [ $(id -u) != 0 ] && sudo=sudo
+            # Find the package manager used on the system
+            if which apt-get >/dev/null; then
+                $sudo apt-get update && $sudo apt-get install -y jq
+            elif which dnf >/dev/null; then
+                $sudo dnf install -y jq
+            elif which yum >/dev/null; then
+                $sudo yum install -y jq
+            elif which pacman >/dev/null; then
+                $sudo pacman -S jq
+            # otherwise fail if we don't know how to install jq
+            else
+                echo "No supported package manager (apt, dnf, yum or pacman) found."
+            fi
+        fi
+        # Check if jq was successfully installed
+        if ! which jq >/dev/null; then
+            echo "Unable to install jq, cannot continue. Please install manually and run again."
+            exit 1
+        fi
 }
 
 # If script is being sourced, do not execute
