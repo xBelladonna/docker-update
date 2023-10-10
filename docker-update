@@ -58,7 +58,7 @@ docker_update() {
         $compose up -d
         local new_image_ids=($($compose images | awk '{ if (NR>2) print $4 }'))
         for ((i = 0; i < ${#image_ids[*]}; i++)); do
-            if docker image inspect ${image_ids[$i]} >/dev/null 2>&1 &&
+            if docker image inspect ${image_ids[$i]} >/dev/null 2>&1 && \
                 [ ${image_ids[$i]} != ${new_image_ids[$i]} ]; then
                 echo Removing old image ID ${image_ids[$i]} for container ${container_names[$i]}...
                 docker rmi ${image_ids[$i]}
