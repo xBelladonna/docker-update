@@ -3,14 +3,16 @@
 docker_update() {
     # Directory containing Docker scripts and name of script that creates/runs containers
     # At least directory must be set in order for this function to work
-    local dir="${DOCKER_UPDATE_DIR}"
-    local runscript_name="${DOCKER_UPDATE_RUNSCRIPT:-run.sh}"
 
-    # Sanity check for master directory
-    if [ -z "$dir" ]; then
+    # Sanity check for master directories
+    if [ -z "${DOCKER_UPDATE_DIR}" ]; then
         echo -e "Run script/Compose file directory not set, cannot continue.\nPlease set environment variable \"DOCKER_UPDATE_DIR\" to directory where run scripts and/or docker-compose.yml files can be found."
         return 1
     fi
+
+    local dirs
+    IFS=":" read -ra dirs <<< "${DOCKER_UPDATE_DIR}"
+    local runscript_name="${DOCKER_UPDATE_RUNSCRIPT:-run.sh}"
 
     # Get container name we are updating from first argument
     local container=$1
@@ -19,12 +21,16 @@ docker_update() {
     # minimize search time. Freaky bash-escaped regex to search for container names within
     # run script supports names either without quotes, or enclosed in single or double quotes
     local runscript
-    local composefile=$(find "$dir" -maxdepth 5 -type f -name docker-compose.yml \
-        -exec grep -l -E "container_name: (['\"])*$container\$(['\"])*" {} + 2>/dev/null)
-    [ -z "$composefile" ] && [ -n "$runscript_name" ] &&
-        runscript=$(find "$dir" -maxdepth 5 -type f \
+    local composefile
+    for dir in ${dirs[@]}; do
+        composefile=$(find "$dir/" -maxdepth 5 -type f -name docker-compose.yml \
+            -exec grep -l -E "container_name: (['\"])*$container\$(['\"])*" {} + 2>/dev/null)
+        [ -n "$composefile" ] && break
+        [ -n "$runscript_name" ] && runscript=$(find "$dir/" -maxdepth 5 -type f \
             -name "$runscript_name" \
             -exec grep -l -E -- "--name (['\"])*$container(['\"])*(\s|\w)" {} + 2>/dev/null)
+        [ -n "$runscript" ] && break
+    done
 
     # Sanity check for existence of containers's run script or or parent compose file
     if [ -z "$composefile" ] && [ -z "$runscript" ]; then
