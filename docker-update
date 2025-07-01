@@ -60,6 +60,11 @@ docker_update() {
         cd $(dirname $composefile)
         local image_ids=($($compose images | awk '{ if (NR>1) print $4 }'))
         local container_names=($($compose images | awk '{ if (NR>1) print $1 }'))
+        # Build container if necessary
+        if [ -n "$(docker compose config --format json | \
+               jq -r '.. | objects | select(.build) | .build')" ]; then
+            $compose build --pull
+        fi
         $compose pull
         $compose up -d
         local new_image_ids=($($compose images | awk '{ if (NR>1) print $4 }'))
