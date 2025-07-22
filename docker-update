@@ -58,7 +58,7 @@ docker_update() {
         fi
 
         cd $(dirname $composefile)
-        local image_ids=($($compose images | awk '{ if (NR>1) print $4 }'))
+        local image_ids=($($compose images | awk '{ if (NR>1) print $5 }'))
         local container_names=($($compose images | awk '{ if (NR>1) print $1 }'))
         # Build container if necessary
         if [ -n "$(docker compose config --format json | \
@@ -67,7 +67,7 @@ docker_update() {
         fi
         $compose pull
         $compose up -d
-        local new_image_ids=($($compose images | awk '{ if (NR>1) print $4 }'))
+        local new_image_ids=($($compose images | awk '{ if (NR>1) print $5 }'))
         for ((i = 0; i < ${#image_ids[*]}; i++)); do
             if docker image inspect ${image_ids[$i]} >/dev/null 2>&1 && \
                 [ ${image_ids[$i]} != ${new_image_ids[$i]} ]; then
